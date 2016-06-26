@@ -1,0 +1,6 @@
+This is a tool to commit databases in git, so you can easily diff amongst
+versions, and see which tables are affected by what changes you might be
+doing on the front end (of a website for example). It was developped as a
+utility to test a lot of work done to migrate drupal 6 to drupal 7, so I
+can easily get back to previous versions amongst the steps I'm doing, but
+I think the tool as some value in itself.
