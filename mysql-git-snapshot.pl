@@ -65,7 +65,23 @@ sub dbdump {
 
 }
 
-sub commit_cur_state ($auth, $opt, $db, $message) {
+sub commit_cur_state ($dir, $branch, $auth, $opt, $db, $message) {
+  if (! -d $dir) {
+    if ($debug) {
+      print "initializing git repo of the database dumps through the steps of the upgrade";
+    }
+    mkdir($dir);
+    chdir($dir);
+  if (! -d '.git') {
+    # not a git repo     
+    `git init .`;
+    if ($branch eq "master") {
+      # https://stackoverflow.com/questions/11225105/is-it-possible-to-specify-branch-name-on-first-commit-in-git
+      `git symbolic-ref HEAD refs/heads/$branchname`;
+    } 
+  } else {
+    `git checkout $branch`;
+  }
   commit($message, dbdump($auth, $opt, $db, 1));
 } 
 
@@ -102,4 +118,4 @@ if (!$debian ) {
   $auth = " --defaults-file=/etc/mysql/debian.cnf";
 }
 
-commit_cur_state($auth, $opt, $db, $message);
+commit_cur_state($directory, $auth, $opt, $db, $message);
