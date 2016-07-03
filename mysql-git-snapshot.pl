@@ -35,7 +35,7 @@ sub dbdump {
   $opt = shift(@_);
   $db = shift(@_);
   $split = shift(@_) or 0;
-  `mysqldump $auth $opt $db > $db.sql`;
+  `mysqldump $auth $opt --extended-insert=FALSE $db > $db.sql`;
   if ($debug) {
     print "dumped $db !\n\n"; 
   }
@@ -57,7 +57,7 @@ sub dbdump {
        push(@files, $filename . ".sql");
        `cat AAAAhead.sql $file ZZZZfoot.sql > "$filename.sql"`;
     }
-    `rm AAAAhead.sql ZZZZfoot.sql table*`;
+    `rm AAAAhead.sql ZZZZfoot.sql table* $db.sql`;
     return @files;
   } else {
     return ("$db.sql"); 
@@ -71,13 +71,14 @@ sub commit_cur_state ($dir, $branch, $auth, $opt, $db, $message) {
       print "initializing git repo of the database dumps through the steps of the upgrade";
     }
     mkdir($dir);
-    chdir($dir);
+  }
+  chdir($dir);
   if (! -d '.git') {
     # not a git repo     
     `git init .`;
     if ($branch eq "master") {
       # https://stackoverflow.com/questions/11225105/is-it-possible-to-specify-branch-name-on-first-commit-in-git
-      `git symbolic-ref HEAD refs/heads/$branchname`;
+      `git symbolic-ref HEAD refs/heads/$branch`;
     } 
   } else {
     `git checkout $branch`;
@@ -86,10 +87,10 @@ sub commit_cur_state ($dir, $branch, $auth, $opt, $db, $message) {
 } 
 
 sub commit {
-  $message = shift(@_);
+  $msg = shift(@_);
   @files = @_;
   `git add @files`;
-  `git commit -m "$message"`;
+  `git commit -m "$msg"`;
 }
 
 $branch = 'master';
@@ -118,4 +119,4 @@ if (!$debian ) {
   $auth = " --defaults-file=/etc/mysql/debian.cnf";
 }
 
-commit_cur_state($directory, $auth, $opt, $db, $message);
+commit_cur_state($directory, $branch, $auth, $opt, $db, $message);
