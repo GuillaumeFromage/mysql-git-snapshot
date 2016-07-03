@@ -1,10 +1,8 @@
 #!/usr/bin/perl
 
 use warnings;
-use feature 'signatures';
 use feature qw(switch say);
 use Getopt::Long;
-no warnings qw(experimental::signatures);
 
 sub usage() {
     print <<USAGE
@@ -39,7 +37,7 @@ sub dbdump {
   $opt = shift(@_);
   $db = shift(@_);
   $split = shift(@_) or 0;
-  @opts = shift(@_) or ();
+  @opts = @_;
   `mysqldump $auth $opt --extended-insert=FALSE $db > $db.sql`;
   if ($debug) {
     print "dumped $db !\n\n"; 
@@ -53,6 +51,10 @@ sub dbdump {
     chomp($last);
     # print "csplit -b '%d' -s -f$last $last \"/40103 SET TIME_ZONE=\@OLD_TIME_ZONE/\" {*}";
     `csplit -b '%d' -s -f$last $last "/40103 SET TIME_ZONE=\@OLD_TIME_ZONE/" {*}`;
+    foreach $del  (grep( /^deleteifexists:/, @opts )) {
+      ($junk,$name) = split(":", $del);
+      `git rm $name.sql`;
+    }
     if ( grep( /^no-time$/, @opts ) ) {
       `grep -ve'-- Dump completed on' ${last}1 > ZZZZfoot.sql`;
       `rm ${last}1`;
@@ -76,7 +78,14 @@ sub dbdump {
 
 }
 
-sub commit_cur_state ($dir, $branch, $auth, $opt, $db, $message, @opts) {
+sub commit_cur_state {
+  $dir = shift(@_);
+  $branch = shift(@_);
+  $auth = shift(@_);
+  $opt = shift(@_);
+  $db = shift(@_);
+  $message = shift(@_);
+  @opts = @_;
   if (! -d $dir) {
     if ($debug) {
       print "initializing git repo of the database dumps through the steps of the upgrade";
@@ -106,10 +115,10 @@ sub commit {
 
 $branch = 'master';
 $message = 'mysql git snapshot autocommit ' . time();
-$opt = $db = $directory = '';
+$ignore_tables = $opt = $db = $directory = '';
 $debug = $notime = $debian = 0;
 @opts = ();
-GetOptions ('db=s' => \$db, 'branch=s' => \$branch, 'opt=s' => \$opt, 'debian' => \$debian, 'dir=s' => \$directory, 'message=s' => \$message,'no-time' => \$notime, 'debug' => \$debug)
+GetOptions ('db=s' => \$db, 'branch=s' => \$branch, 'opt=s' => \$opt, 'ignore-tables=s' => \$ignore_tables, 'debian' => \$debian, 'dir=s' => \$directory, 'message=s' => \$message,'no-time' => \$notime, 'debug' => \$debug)
   or usage();
 
 if ($db eq '') {
@@ -121,9 +130,19 @@ if ($directory eq '') {
    $directory = $db;
 }
 
+
 if ($notime) {
   push(@opts, 'no-time');
 } 
+
+if ($ignore_tables) {
+  # this is a bit useless, but kinda nice to not have to write 500 times the same string
+  @ignored = split(',', $ignore_tables);
+  foreach $table (@ignored) {
+    $opt .= " --ignore-table=$db.$table ";
+    push(@opts, "deleteifexists:$table");
+  }
+}   
 
 if (!$debian ) {
   #TODO or if there is no other way of authing against the database server
