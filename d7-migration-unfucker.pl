@@ -1,7 +1,6 @@
 #!/usr/bin/perl
 
 use warnings;
-use feature 'signatures';
 use feature qw(switch say);
 use Getopt::Long;
 
@@ -15,59 +14,57 @@ USAGE
 }
 
 sub remap_nids {
+  $db = shift(@_);
+  $d6db = shift(@_);
+  $auth = shift(@_);
+  $debug = shift(@_);
   # lets just yolo shall we
   @tables = ("history", "node_access", "node_comment_statistics", "node_revision", "search_node_link", "taxonomy_index"); 
   foreach $a (@tables)  {
-    print "UPDATE IGNORE $a $d6db.node AS d6 JOIN node ON node.created=d6.created SET history.nid=d6.nid;\n";
+    `echo "UPDATE IGNORE $a JOIN $d6db.node AS d6 JOIN node ON node.created=d6.created SET nid=d6.nid;\n" | mysql $auth $db `;
+    if ($debug) {    
+      print "UPDATE IGNORE $a JOIN $d6db.node AS d6 JOIN node ON node.created=d6.created SET nid=d6.nid;\n" ;
+    }
   }
+  
 }
 
-sub get_next_branch_name() {
+sub get_next_branch_name {
   return $d7db . time();
 }
 
-sub init () {
+sub find_mysql_git_snapshot {
+  if (-f 'mysql-git-snapshot.pl') {
+    # we found it !
+    return './mysql-git-snapshot.pl';
+  } else {
+    return 0;
+  }
+}
+
+sub init {
+  $mgs = find_mysql_git_snapshot(); 
+  if (!$mgs) {
+     die("couldn't find mysql_git_snapshot :(\n");
+  } 
   $new = 0; 
+  print "$branch\n";
   if ($branch eq "<new!>") {
     $branchname = get_next_branch_name();
     $new = "1";
   } else {
     $branchname = $branch;
   }
-  if (! -d $hackdir) {
-    if ($debug) {
-      print "initializing git repo of the database dumps through the steps of the upgrade";
-    }
-    mkdir($hackdir);
-    chdir($hackdir);
-    `git init .`;
-    # https://stackoverflow.com/questions/11225105/is-it-possible-to-specify-branch-name-on-first-commit-in-git
-    `git symbolic-ref HEAD refs/heads/$branchname`;
-    commit_cur_state($auth, $mydumpopt, $d7db, "initial commit of the database before we intervene");
-  } else {
-    chdir($hackdir);
-    if ($new) { 
-      if ($debug) { 
-        print "there is already a repo and we weren't specified a branch: creating $branchname\n\n";
-      }
-      `git branch $branchname`;
-    } else {
-      if ($debug) { 
-        print "there is already a repo and we're going to the specific branch\n\n";
-      }
-      `git checkout $branchname`;
-    }
-    commit_cur_state($auth, $mydumpopt, $d7db, "initial commit of the database before we intervene");
-  }  
-    
+  `$mgs --dir=$hackdir --message="d7-migration-unfucker first commit" --branch=$branchname --db=$d7db --debug --debian --no-time --ignore-tables='cache,cache_block,cache_bootstrap,cache_field,cache_filter,cache_form,cache_image,cache_menu,cache_page,cache_path,cache_update'`;
+  return $mgs;
 }
 
 $hackdir = "dbs";
-$branch = "<new!>";
+$branch = "master";
 
 $debug = $d6db = $d7db = $deb = "";
 
-GetOptions ('debug' => \$debug, 'd6db=s' => \$d6db, 'd7db=s' => \$d7db,'debian' => \$deb,)
+GetOptions ('branch=s' => \$branch, 'debug' => \$debug, 'd6db=s' => \$d6db, 'd7db=s' => \$d7db,'debian' => \$deb,)
   or usage();
 
 if (!$deb) {
@@ -77,13 +74,13 @@ if (!$deb) {
   $auth = "--defaults-file=/etc/mysql/debian.cnf";
 }
 
-$mydumpopt = "--extended-insert=FALSE";
-
 if ($d6db eq "" or $d7db eq "") {
   usage();
   exit();
 } 
-init();
 
-remap_nids();
+$mgs = init();
 
+remap_nids($d7db, $d6db, $auth, $debug);
+ 
+`$mgs --dir=$hackdir --message="after remapping the nids from the d6db" --branch=$branch --db=$d7db --debug --debian --no-time --ignore-tables='cache,cache_block,cache_bootstrap,cache_field,cache_filter,cache_form,cache_image,cache_menu,cache_page,cache_path,cache_update'`;
